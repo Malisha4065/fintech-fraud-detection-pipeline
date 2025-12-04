@@ -14,10 +14,10 @@ echo "========================================"
 echo "Waiting for Spark Master to be ready..."
 sleep 10
 
-# Submit the Spark job
-docker exec spark-master spark-submit \
+# Submit the Spark job using official Apache Spark image path
+docker exec spark-master /opt/spark/bin/spark-submit \
     --master spark://spark-master:7077 \
-    --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.postgresql:postgresql:42.6.0 \
+    --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3,org.postgresql:postgresql:42.6.0 \
     --conf spark.sql.streaming.checkpointLocation=/opt/datalake/checkpoints \
     --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp" \
     /opt/spark-scripts/fraud_detector.py
