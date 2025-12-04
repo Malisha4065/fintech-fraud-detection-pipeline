@@ -103,9 +103,9 @@ services:
     environment:
       - SPARK_WORKER_MEMORY=2G
       - SPARK_WORKER_CORES=2
-      - SPARK_WORKER_WEBUI_PORT=8081
+      - SPARK_WORKER_WEBUI_PORT=8083
     ports:
-      - "8081:8081"
+      - "8083:8083"
     volumes:
       - ./scripts:/opt/spark-scripts
       - ./datalake:/opt/datalake
