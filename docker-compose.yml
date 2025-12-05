@@ -48,6 +48,25 @@ services:
       retries: 10
 
   # =============================================================================
+  # KAFKA UI - Web interface for Kafka monitoring
+  # =============================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8084:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: fintech-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - fintech-network
+
+  # =============================================================================
   # POSTGRESQL - Database for storing fraud alerts
   # =============================================================================
   postgres:
