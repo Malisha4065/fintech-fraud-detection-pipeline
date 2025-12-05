@@ -133,6 +133,36 @@ services:
       - fintech-network
 
   # =============================================================================
+  # SPARK JOB SUBMITTER - Automates the Speed Layer startup
+  # =============================================================================
+  spark-job:
+    image: apache/spark:3.5.3-python3
+    container_name: spark-job
+    depends_on:
+      - spark-master
+      - spark-worker
+      - kafka
+      - postgres
+    environment:
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    volumes:
+      - ./scripts:/opt/spark-scripts
+      - ./datalake:/opt/datalake
+    networks:
+      - fintech-network
+    restart: on-failure
+    command: >
+      /bin/bash -c "
+      echo 'Waiting for Spark Master to be ready...' &&
+      sleep 30 &&
+      /opt/spark/bin/spark-submit 
+      --master spark://spark-master:7077 
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3,org.postgresql:postgresql:42.6.0 
+      --conf spark.driver.extraJavaOptions='-Divy.cache.dir=/tmp -Divy.home=/tmp' 
+      /opt/spark-scripts/fraud_detector.py
+      "
+
+  # =============================================================================
   # APACHE AIRFLOW - Workflow orchestration
   # =============================================================================
   airflow-init:
