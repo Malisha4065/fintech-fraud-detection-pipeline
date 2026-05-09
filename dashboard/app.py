@@ -230,6 +230,10 @@ def render_pagination(total_rows, key_prefix):
     if total_rows <= 0:
         return 25, 0
 
+    page_key = f"{key_prefix}_page"
+    if page_key not in st.session_state:
+        st.session_state[page_key] = 1
+
     page_size = st.selectbox(
         "Rows per page",
         options=[10, 25, 50, 100, 250],
@@ -237,14 +241,20 @@ def render_pagination(total_rows, key_prefix):
         key=f"{key_prefix}_page_size"
     )
     total_pages = max((total_rows + page_size - 1) // page_size, 1)
+    st.session_state[page_key] = min(max(int(st.session_state[page_key]), 1), total_pages)
+
+    # Do not set max_value here. For live sources, total_pages changes while
+    # records arrive, and Streamlit resets widgets when bounds change.
     page = st.number_input(
         "Page",
         min_value=1,
-        max_value=total_pages,
-        value=1,
         step=1,
-        key=f"{key_prefix}_page"
+        key=page_key
     )
+    if page > total_pages:
+        page = total_pages
+        st.session_state[page_key] = total_pages
+
     offset = (page - 1) * page_size
     st.caption(f"Showing page {page:,} of {total_pages:,} | Total rows: {total_rows:,}")
     return page_size, offset
