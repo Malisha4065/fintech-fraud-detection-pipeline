@@ -1,6 +1,7 @@
 # FinTech Fraud Detection Pipeline
 
-[Reports](datalake/reports)
+YouTube Demo: https://youtu.be/IUuRDoD2-00  
+Final output: [Reports](datalake/reports)
 
 ## Lambda Architecture for Real-Time Fraud Detection
 
