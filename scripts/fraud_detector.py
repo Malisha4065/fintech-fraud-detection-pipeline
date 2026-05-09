@@ -30,9 +30,9 @@ accurate fraud detection. Here's how event time is handled:
    - Example: If current max event time is 12:00, Spark will still accept
      events with timestamp >= 11:50 but will drop events older than that.
 
-3. WINDOWING FOR IMPOSSIBLE TRAVEL: We use a 10-minute tumbling window based
-   on event time to detect impossible travel. Self-join compares transactions
-   within the same event-time window, not processing time.
+3. RANGE JOIN FOR IMPOSSIBLE TRAVEL: We compare each user's transactions with
+   a stream-stream self join, so "within 10 minutes" is evaluated as a true
+   rolling event-time range rather than fixed clock buckets.
 
 4. WHY EVENT TIME MATTERS:
    - Network delays may cause out-of-order arrival
@@ -45,12 +45,10 @@ import os
 import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
-    from_json, col, to_timestamp, window, count, 
-    collect_set, size, expr, current_timestamp,
-    lit, when, struct, array_distinct, explode
+    from_json, col, to_timestamp, expr, lit
 )
 from pyspark.sql.types import (
-    StructType, StructField, StringType, DoubleType, TimestampType
+    StructType, StructField, StringType, DoubleType
 )
 
 # =============================================================================
@@ -202,13 +200,14 @@ def detect_high_value_fraud(stream):
 
 def detect_impossible_travel_fraud(stream):
     """
-    Detect impossible travel fraud using stateful processing with self-join.
+    Detect impossible travel fraud using a stateful stream-stream self join.
     
     This detects when the same user makes transactions from different countries
     within a 10-minute window - a physical impossibility indicating fraud.
     
-    Uses windowed aggregation with state management to track user locations
-    within each time window.
+    The join compares an earlier transaction to a later transaction for the
+    same user. If the countries differ and the later event occurs within
+    10 minutes of the earlier event, the later transaction is flagged.
     
     Args:
         stream: Input streaming DataFrame with transactions
@@ -234,43 +233,46 @@ def detect_impossible_travel_fraud(stream):
         .withWatermark("event_time", WATERMARK_DELAY)
     
     # =========================================================================
-    # EVENT TIME HANDLING - STEP 4: Window-based Aggregation
-    # 
-    # We use a 10-minute TUMBLING window based on EVENT TIME to group
-    # transactions. The window function creates buckets like:
-    # - [12:00, 12:10), [12:10, 12:20), etc.
-    # 
-    # All transactions with event_time in the same bucket are grouped together
-    # regardless of when they were actually processed by Spark.
-    # 
-    # Why tumbling window?
-    # - Fixed, non-overlapping windows simplify state management
-    # - Clear boundaries for fraud detection logic
-    # - Matches the business requirement of "within 10 minutes"
+    # EVENT TIME HANDLING - STEP 4: Rolling 10-Minute Range Comparison
+    #
+    # A tumbling window can miss fraud near a clock boundary, for example:
+    # 12:09 USA and 12:11 UK are only 2 minutes apart but land in different
+    # fixed 10-minute buckets. This self join evaluates the actual event-time
+    # distance, so any pair within 10 minutes is caught.
     # =========================================================================
-    impossible_travel = watermarked_stream \
-        .groupBy(
-            col("user_id"),
-            window(col("event_time"), IMPOSSIBLE_TRAVEL_WINDOW)
-        ) \
-        .agg(
-            count("*").alias("transaction_count"),
-            collect_set("country").alias("countries"),
-            collect_set("transaction_id").alias("transaction_ids"),
-            collect_set("location").alias("locations")
-        ) \
-        .filter(size(col("countries")) > 1) \
-        .select(
-            explode(col("transaction_ids")).alias("transaction_id"),
-            col("user_id"),
-            col("window.end").alias("detected_at"),
-            lit("unknown").alias("merchant_category"),
-            lit(0.0).alias("amount"),
-            col("locations").cast("string").alias("location"),
-            col("countries").cast("string").alias("country"),
-            lit("IMPOSSIBLE_TRAVEL").alias("fraud_type"),
-            expr("concat('User in multiple countries within 10 min: ', array_join(countries, ', '))").alias("fraud_reason")
-        )
+    earlier_txn = watermarked_stream.alias("earlier")
+    later_txn = watermarked_stream.alias("later")
+
+    impossible_pairs = earlier_txn.join(
+        later_txn,
+        expr("""
+            earlier.user_id = later.user_id
+            AND earlier.transaction_id <> later.transaction_id
+            AND earlier.country <> later.country
+            AND later.event_time > earlier.event_time
+            AND later.event_time <= earlier.event_time + interval 10 minutes
+        """),
+        "inner"
+    )
+
+    impossible_travel = impossible_pairs.select(
+        col("later.transaction_id").alias("transaction_id"),
+        col("later.user_id").alias("user_id"),
+        col("later.event_time").alias("detected_at"),
+        col("later.merchant_category").alias("merchant_category"),
+        col("later.amount").alias("amount"),
+        col("later.location").alias("location"),
+        col("later.country").alias("country"),
+        lit("IMPOSSIBLE_TRAVEL").alias("fraud_type"),
+        expr("""
+            concat(
+                'User moved from ', earlier.country, ' (', earlier.location, ') to ',
+                later.country, ' (', later.location, ') within ',
+                cast(round((unix_timestamp(later.event_time) - unix_timestamp(earlier.event_time)) / 60.0, 2) as string),
+                ' minutes'
+            )
+        """).alias("fraud_reason")
+    )
     
     logger.info(f"Impossible travel detection configured (window: {IMPOSSIBLE_TRAVEL_WINDOW})")
     return impossible_travel
@@ -307,7 +309,7 @@ def write_to_postgres(fraud_stream, table_name: str, checkpoint_suffix: str):
     query = fraud_stream \
         .writeStream \
         .foreachBatch(write_batch) \
-        .outputMode("update") \
+        .outputMode("append") \
         .option("checkpointLocation", f"{CHECKPOINT_PATH}/postgres_{checkpoint_suffix}") \
         .start()
     
@@ -390,13 +392,13 @@ def run_fraud_detection():
     high_value_query = write_to_postgres(
         high_value_fraud_stream, 
         "fraud_alerts", 
-        "high_value"
+        "high_value_v2"
     )
     
     impossible_travel_query = write_to_postgres(
         impossible_travel_fraud_stream, 
         "fraud_alerts", 
-        "impossible_travel"
+        "impossible_travel_v2"
     )
     
     # Archive all raw transactions to Parquet for batch layer
@@ -409,10 +411,10 @@ def run_fraud_detection():
     # Console output for debugging (optional - can be removed in production)
     console_query = high_value_fraud_stream \
         .writeStream \
-        .outputMode("update") \
+        .outputMode("append") \
         .format("console") \
         .option("truncate", "false") \
-        .option("checkpointLocation", f"{CHECKPOINT_PATH}/console_debug") \
+        .option("checkpointLocation", f"{CHECKPOINT_PATH}/console_debug_v2") \
         .start()
     
     logger.info("All streaming queries started. Waiting for termination...")
