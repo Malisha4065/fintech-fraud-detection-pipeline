@@ -138,6 +138,7 @@ services:
   spark-job:
     image: apache/spark:3.5.3-python3
     container_name: spark-job
+    user: root
     depends_on:
       - spark-master
       - spark-worker
@@ -155,6 +156,8 @@ services:
       /bin/bash -c "
       echo 'Waiting for Spark Master to be ready...' &&
       sleep 30 &&
+      mkdir -p /opt/datalake/raw /opt/datalake/checkpoints &&
+      chmod -R a+rwX /opt/datalake &&
       /opt/spark/bin/spark-submit 
       --master spark://spark-master:7077 
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.3,org.postgresql:postgresql:42.6.0 
@@ -165,12 +168,35 @@ services:
   # =============================================================================
   # APACHE AIRFLOW - Workflow orchestration
   # =============================================================================
+  airflow-permissions:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
+    container_name: airflow-permissions
+    user: root
+    volumes:
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
+      - ./datalake:/opt/datalake
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/plugins /opt/datalake/raw /opt/datalake/validated_transactions /opt/datalake/reports /opt/datalake/checkpoints
+        chmod -R a+rwX /opt/airflow/logs /opt/airflow/plugins /opt/datalake
+    networks:
+      - fintech-network
+
   airflow-init:
-    image: apache/airflow:2.7.3-python3.10
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: airflow-init
     depends_on:
       postgres:
         condition: service_healthy
+      airflow-permissions:
+        condition: service_completed_successfully
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://fintech:fintech123@postgres:5432/fraud_db
@@ -180,17 +206,24 @@ services:
       - _AIRFLOW_WWW_USER_CREATE=true
       - _AIRFLOW_WWW_USER_USERNAME=admin
       - _AIRFLOW_WWW_USER_PASSWORD=admin
+    volumes:
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
+      - ./datalake:/opt/datalake
     entrypoint: /bin/bash
     command:
       - -c
       - |
+        mkdir -p /opt/datalake/raw /opt/datalake/validated_transactions /opt/datalake/reports
         airflow db migrate
         airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     networks:
       - fintech-network
 
   airflow-webserver:
-    image: apache/airflow:2.7.3-python3.10
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: airflow-webserver
     depends_on:
       airflow-init:
@@ -205,8 +238,8 @@ services:
       - "8082:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
       - ./datalake:/opt/datalake
     command: webserver
     networks:
@@ -218,7 +251,9 @@ services:
       retries: 5
 
   airflow-scheduler:
-    image: apache/airflow:2.7.3-python3.10
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile
     container_name: airflow-scheduler
     depends_on:
       airflow-init:
@@ -230,8 +265,8 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
     volumes:
       - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/logs:/opt/airflow/logs
-      - ./airflow/plugins:/opt/airflow/plugins
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
       - ./datalake:/opt/datalake
     command: scheduler
     networks:
@@ -289,3 +324,5 @@ networks:
 
 volumes:
   postgres-data:
+  airflow-logs:
+  airflow-plugins:
