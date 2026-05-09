@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir \
     pandas==2.1.3 \
     psycopg2-binary==2.9.9 \
     pyarrow==14.0.1 \
+    duckdb==0.9.2 \
     plotly==5.18.0 \
     sqlalchemy==2.0.23
 

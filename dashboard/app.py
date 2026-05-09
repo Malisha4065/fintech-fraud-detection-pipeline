@@ -6,13 +6,13 @@ Serving Layer Visualization for Lambda Architecture
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
+import duckdb
+from datetime import datetime
 import psycopg2
-from psycopg2.extras import RealDictCursor
 import os
 import glob
 import time
+from pathlib import Path
 
 # =============================================================================
 # Configuration
@@ -36,6 +36,7 @@ DB_CONFIG = {
 # Datalake paths
 DATALAKE_RAW = "/opt/datalake/raw"
 DATALAKE_VALIDATED = "/opt/datalake/validated_transactions"
+DATALAKE_REPORTS = "/opt/datalake/reports"
 
 # =============================================================================
 # Database Connection
@@ -147,6 +148,106 @@ def load_parquet_data():
                 except Exception as e:
                     st.warning(f"Error reading parquet files: {e}")
     return None
+
+def get_fraud_alert_count():
+    """Return total fraud alert rows for paginated browsing."""
+    df = execute_query("SELECT COUNT(*) AS total FROM fraud_alerts")
+    if df.empty:
+        return 0
+    return int(df.iloc[0]["total"])
+
+def load_paginated_fraud_alerts(limit, offset):
+    """Load one page of speed-layer fraud alerts from PostgreSQL."""
+    query = """
+        SELECT
+            id,
+            transaction_id,
+            user_id,
+            fraud_type,
+            amount,
+            country,
+            location,
+            merchant_category,
+            detected_at,
+            created_at,
+            fraud_reason
+        FROM fraud_alerts
+        ORDER BY created_at DESC, id DESC
+        LIMIT %s OFFSET %s
+    """
+    return execute_query(query, (limit, offset))
+
+def get_parquet_files(path):
+    """Return parquet files below a data lake path."""
+    if not os.path.exists(path):
+        return []
+    return glob.glob(os.path.join(path, "**/*.parquet"), recursive=True)
+
+def parquet_count(path):
+    """Count rows in Parquet files without loading them into pandas."""
+    parquet_files = get_parquet_files(path)
+    if not parquet_files:
+        return 0
+
+    pattern = os.path.join(path, "**/*.parquet").replace("'", "''")
+    query = f"SELECT COUNT(*) AS total FROM read_parquet('{pattern}', hive_partitioning=true)"
+    try:
+        return int(duckdb.sql(query).fetchone()[0])
+    except Exception as e:
+        st.error(f"Could not count Parquet rows: {e}")
+        return 0
+
+def load_paginated_parquet(path, limit, offset):
+    """Load one page from Parquet files using DuckDB LIMIT/OFFSET."""
+    parquet_files = get_parquet_files(path)
+    if not parquet_files:
+        return pd.DataFrame()
+
+    pattern = os.path.join(path, "**/*.parquet").replace("'", "''")
+    query = f"""
+        SELECT *
+        FROM read_parquet('{pattern}', hive_partitioning=true)
+        LIMIT {int(limit)} OFFSET {int(offset)}
+    """
+    try:
+        return duckdb.sql(query).df()
+    except Exception as e:
+        st.error(f"Could not load Parquet page: {e}")
+        return pd.DataFrame()
+
+def get_report_files():
+    """Return generated Airflow report files."""
+    if not os.path.exists(DATALAKE_REPORTS):
+        return []
+    return sorted(
+        [p for p in Path(DATALAKE_REPORTS).glob("*") if p.is_file()],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )
+
+def render_pagination(total_rows, key_prefix):
+    """Render reusable pagination controls and return limit/offset."""
+    if total_rows <= 0:
+        return 25, 0
+
+    page_size = st.selectbox(
+        "Rows per page",
+        options=[10, 25, 50, 100, 250],
+        index=1,
+        key=f"{key_prefix}_page_size"
+    )
+    total_pages = max((total_rows + page_size - 1) // page_size, 1)
+    page = st.number_input(
+        "Page",
+        min_value=1,
+        max_value=total_pages,
+        value=1,
+        step=1,
+        key=f"{key_prefix}_page"
+    )
+    offset = (page - 1) * page_size
+    st.caption(f"Showing page {page:,} of {total_pages:,} | Total rows: {total_rows:,}")
+    return page_size, offset
 
 # =============================================================================
 # UI Components
@@ -428,11 +529,112 @@ def render_historical_tab():
     st.subheader("📋 Sample Data Preview")
     st.dataframe(df.head(20), use_container_width=True, hide_index=True)
 
+def render_data_explorer_tab():
+    """Render paginated browsing for speed and batch outputs."""
+    st.header("🗂️ Data Explorer")
+    st.caption("Paginated browsing for speed-layer outputs and batch/data lake outputs")
+
+    source = st.selectbox(
+        "Choose data source",
+        [
+            "Speed Output: PostgreSQL fraud_alerts",
+            "Raw Data Lake: datalake/raw Parquet",
+            "Batch Output: datalake/validated_transactions Parquet",
+            "Batch Reports: datalake/reports"
+        ],
+        key="data_explorer_source"
+    )
+
+    st.divider()
+
+    if source == "Speed Output: PostgreSQL fraud_alerts":
+        st.subheader("Speed Output: PostgreSQL fraud_alerts")
+        total_rows = get_fraud_alert_count()
+        if total_rows == 0:
+            st.info("No fraud alerts found yet.")
+            return
+
+        page_size, offset = render_pagination(total_rows, "fraud_alerts")
+        df = load_paginated_fraud_alerts(page_size, offset)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        return
+
+    if source == "Raw Data Lake: datalake/raw Parquet":
+        st.subheader("Raw Data Lake: datalake/raw")
+        st.caption("This is the raw Parquet archive written continuously by Spark Streaming.")
+        total_rows = parquet_count(DATALAKE_RAW)
+        if total_rows == 0:
+            st.info("No raw Parquet rows found yet.")
+            return
+
+        page_size, offset = render_pagination(total_rows, "raw_parquet")
+        df = load_paginated_parquet(DATALAKE_RAW, page_size, offset)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        return
+
+    if source == "Batch Output: datalake/validated_transactions Parquet":
+        st.subheader("Batch Output: datalake/validated_transactions")
+        st.caption("This is the validated non-fraud warehouse output produced by the Airflow DAG.")
+        total_rows = parquet_count(DATALAKE_VALIDATED)
+        if total_rows == 0:
+            st.info("No validated Parquet rows found yet. Trigger the Airflow DAG to create this output.")
+            return
+
+        page_size, offset = render_pagination(total_rows, "validated_parquet")
+        df = load_paginated_parquet(DATALAKE_VALIDATED, page_size, offset)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        return
+
+    st.subheader("Batch Reports: datalake/reports")
+    report_files = get_report_files()
+    if not report_files:
+        st.info("No reports found yet. Trigger the Airflow DAG to generate reconciliation and analytic reports.")
+        return
+
+    total_rows = len(report_files)
+    page_size, offset = render_pagination(total_rows, "report_files")
+    page_files = report_files[offset:offset + page_size]
+    report_df = pd.DataFrame([
+        {
+            "file_name": p.name,
+            "size_bytes": p.stat().st_size,
+            "modified_at": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        }
+        for p in page_files
+    ])
+    st.dataframe(report_df, use_container_width=True, hide_index=True)
+
+    selected_name = st.selectbox(
+        "Preview report file",
+        [p.name for p in page_files],
+        key="report_preview_file"
+    )
+    selected_file = next((p for p in page_files if p.name == selected_name), None)
+    if selected_file is None:
+        return
+
+    if selected_file.suffix.lower() == ".txt":
+        st.text(selected_file.read_text(errors="replace"))
+    elif selected_file.suffix.lower() == ".csv":
+        st.dataframe(pd.read_csv(selected_file), use_container_width=True, hide_index=True)
+    elif selected_file.suffix.lower() == ".parquet":
+        st.dataframe(pd.read_parquet(selected_file).head(100), use_container_width=True, hide_index=True)
+    else:
+        st.info("Preview is available for .txt, .csv, and .parquet report files.")
+
 def render_sidebar():
     """Render the sidebar."""
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/000000/fraud.png", width=80)
         st.title("Navigation")
+        
+        st.divider()
+        
+        auto_refresh = st.checkbox(
+            "Auto-refresh every 5 seconds",
+            value=True,
+            help="Turn this off while paging through the Data Explorer."
+        )
         
         st.divider()
         
@@ -475,16 +677,18 @@ def render_sidebar():
             st.success("✅ Datalake Mounted")
         else:
             st.warning("⚠️ Datalake Not Found")
+        
+        return auto_refresh
 
 # =============================================================================
 # Main Application
 # =============================================================================
 def main():
-    render_sidebar()
+    auto_refresh = render_sidebar()
     render_header()
     
     # Create tabs
-    tab1, tab2 = st.tabs(["⚡ Real-Time Alerts", "📚 Historical Analysis"])
+    tab1, tab2, tab3 = st.tabs(["⚡ Real-Time Alerts", "📚 Historical Analysis", "🗂️ Data Explorer"])
     
     with tab1:
         render_realtime_tab()
@@ -492,11 +696,15 @@ def main():
     with tab2:
         render_historical_tab()
 
+    with tab3:
+        render_data_explorer_tab()
+    
+    return auto_refresh
+
 if __name__ == "__main__":
-    # Auto-refresh for real-time tab
-    # Using st.rerun() with time-based refresh
-    main()
+    auto_refresh = main()
     
     # Auto-refresh every 5 seconds
-    time.sleep(5)
-    st.rerun()
+    if auto_refresh:
+        time.sleep(5)
+        st.rerun()
