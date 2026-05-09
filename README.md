@@ -1,5 +1,7 @@
 # FinTech Fraud Detection Pipeline
 
+[Reports](datalake/reports)
+
 ## Lambda Architecture for Real-Time Fraud Detection
 
 This project implements a complete Lambda Architecture solution for detecting fraudulent transactions in a digital wallet system. It combines real-time stream processing with batch analytics for comprehensive fraud detection and reporting.
