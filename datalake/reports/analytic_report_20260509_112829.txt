@@ -1,0 +1,75 @@
+
+================================================================================
+                    ANALYTIC REPORT: Fraud Attempts by Merchant Category
+                    2026-05-09 11:28:29 UTC
+================================================================================
+
+SUMMARY
+-------
+Total Fraud Attempts:    300
+Total Fraud Amount:      $699,821.87
+
+BREAKDOWN BY MERCHANT CATEGORY
+------------------------------
+
+TRAVEL
+  - Fraud Count:    38 (12.7%)
+  - Fraud Amount:   $259,359.67 (37.1%)
+
+ENTERTAINMENT
+  - Fraud Count:    34 (11.3%)
+  - Fraud Amount:   $10,232.66 (1.5%)
+
+GAS_STATION
+  - Fraud Count:    34 (11.3%)
+  - Fraud Amount:   $9,132.75 (1.3%)
+
+ELECTRONICS
+  - Fraud Count:    33 (11.0%)
+  - Fraud Amount:   $113,922.50 (16.3%)
+
+HEALTHCARE
+  - Fraud Count:    30 (10.0%)
+  - Fraud Amount:   $9,904.71 (1.4%)
+
+ONLINE_SHOPPING
+  - Fraud Count:    30 (10.0%)
+  - Fraud Amount:   $7,823.96 (1.1%)
+
+CLOTHING
+  - Fraud Count:    24 (8.0%)
+  - Fraud Amount:   $5,351.83 (0.8%)
+
+UTILITIES
+  - Fraud Count:    23 (7.7%)
+  - Fraud Amount:   $6,730.08 (1.0%)
+
+RESTAURANT
+  - Fraud Count:    22 (7.3%)
+  - Fraud Amount:   $5,845.36 (0.8%)
+
+GROCERY
+  - Fraud Count:    20 (6.7%)
+  - Fraud Amount:   $5,300.55 (0.8%)
+
+JEWELRY
+  - Fraud Count:    7 (2.3%)
+  - Fraud Amount:   $129,006.98 (18.4%)
+
+LUXURY_GOODS
+  - Fraud Count:    5 (1.7%)
+  - Fraud Amount:   $137,210.82 (19.6%)
+
+================================================================================
+TOP 3 HIGH-RISK CATEGORIES
+================================================================================
+
+1. TRAVEL: 38 attempts ($259,359.67)
+
+2. ENTERTAINMENT: 34 attempts ($10,232.66)
+
+3. GAS_STATION: 34 attempts ($9,132.75)
+
+================================================================================
+                    END OF ANALYTIC REPORT
+================================================================================

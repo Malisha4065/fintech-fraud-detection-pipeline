@@ -53,6 +53,8 @@ datalake/checkpoints/*
 !datalake/raw/.gitkeep
 !datalake/validated_transactions/.gitkeep
 !datalake/reports/.gitkeep
+!datalake/reports/*.csv
+!datalake/reports/*.txt
 
 # Parquet files
 *.parquet

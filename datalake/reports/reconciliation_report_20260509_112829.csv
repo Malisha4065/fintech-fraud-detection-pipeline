@@ -1,0 +1,9 @@
+metric,value
+total_transactions,398.0
+validated_transactions,98.0
+fraud_transactions,300.0
+total_amount,725342.52
+validated_amount,25520.649999999998
+blocked_amount,699821.87
+fraud_rate_pct,75.37688442211056
+blocked_rate_pct,96.48157259552356

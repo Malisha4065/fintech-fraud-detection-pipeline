@@ -1,0 +1,13 @@
+merchant_category,fraud_count,fraud_amount,fraud_pct,amount_pct
+travel,38,259359.66999999998,12.67,37.06
+entertainment,34,10232.66,11.33,1.46
+gas_station,34,9132.75,11.33,1.31
+electronics,33,113922.5,11.0,16.28
+healthcare,30,9904.71,10.0,1.42
+online_shopping,30,7823.96,10.0,1.12
+clothing,24,5351.83,8.0,0.76
+utilities,23,6730.08,7.67,0.96
+restaurant,22,5845.36,7.33,0.84
+grocery,20,5300.55,6.67,0.76
+jewelry,7,129006.98,2.33,18.43
+luxury_goods,5,137210.82,1.67,19.61
