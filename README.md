@@ -251,10 +251,9 @@ docker-compose restart airflow-scheduler
 docker exec airflow-webserver python -c "import sys; exec(open('/opt/airflow/dags/reconciliation_dag.py').read())"
 ```
 
-## 📝 License
-
-This project is for educational purposes as part of the Applied Big Data Engineering course.
-
 ## 👥 Team
 
-FinTech Fraud Detection Team - University Mini Project
+| Name | Registration No. |
+|------|------------------|
+| Malisha A.P.D. | EG/2020/4065 |
+| Lelwala L.G.S.R. | EG/2020/4047 |
