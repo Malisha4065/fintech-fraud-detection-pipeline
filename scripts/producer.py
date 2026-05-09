@@ -164,7 +164,6 @@ def generate_high_value_fraud() -> Dict[str, Any]:
         "city": location['city']
     }
     
-    logger.warning(f"🚨 FRAUD PATTERN: High Value Transaction - User: {user_id}, Amount: ${transaction['amount']}")
     return transaction
 
 
@@ -211,12 +210,6 @@ def generate_impossible_travel_fraud() -> List[Dict[str, Any]]:
         "country": location2['country'],
         "city": location2['city']
     }
-    
-    logger.warning(
-        f"🚨 FRAUD PATTERN: Impossible Travel - User: {user_id}, "
-        f"Location 1: {location1['country']}, Location 2: {location2['country']}, "
-        f"Time gap: {time_offset.total_seconds() / 60:.1f} minutes"
-    )
     
     return [transaction1, transaction2]
 
