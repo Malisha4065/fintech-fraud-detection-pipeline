@@ -12,37 +12,7 @@ This project implements a complete Lambda Architecture solution for detecting fr
 
 ## 🏗️ Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        FinTech Fraud Detection Pipeline                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────────────────┐    │
-│  │   Producer   │────▶│    Kafka     │────▶│   Speed Layer (Spark)    │    │
-│  │ (Simulator)  │     │ transactions │     │  Structured Streaming    │    │
-│  └──────────────┘     └──────────────┘     └───────────┬──────────────┘    │
-│                                                        │                    │
-│                             ┌──────────────────────────┼───────────────┐   │
-│                             │                          │               │   │
-│                             ▼                          ▼               │   │
-│                    ┌────────────────┐        ┌─────────────────┐      │   │
-│                    │  PostgreSQL    │        │   Data Lake     │      │   │
-│                    │ (fraud_alerts) │        │  (Parquet/Raw)  │      │   │
-│                    └────────────────┘        └────────┬────────┘      │   │
-│                             │                         │               │   │
-│                             │         ┌───────────────┘               │   │
-│                             │         │                               │   │
-│                             ▼         ▼                               │   │
-│                    ┌─────────────────────────────┐                    │   │
-│                    │     Batch Layer (Airflow)   │                    │   │
-│                    │  - ETL Processing           │                    │   │
-│                    │  - Data Warehouse           │                    │   │
-│                    │  - Reconciliation Reports   │                    │   │
-│                    │  - Analytics Reports        │                    │   │
-│                    └─────────────────────────────┘                    │   │
-│                                                                        │   │
-└────────────────────────────────────────────────────────────────────────────┘
-```
+![FinTech Fraud Detection Pipeline Architecture](architecturediagram.png)
 
 ## 🚨 Fraud Detection Rules
 
